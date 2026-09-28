@@ -1,0 +1,35 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*
+secrets*
+config.local.*
+*.local.json
+
+# Deployment/private state
+private/
+local/
+state/
+runtime/
+artifacts/
+results/
+logs/
+*.state.json
+*.state.json.gz
+
+# Common generated files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+node_modules/
+coverage/
+.DS_Store
+
+# Editor/OS
+.vscode/
+.idea/
