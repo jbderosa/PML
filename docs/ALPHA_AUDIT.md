@@ -43,3 +43,21 @@ Even with sanitized logs, workflow run timing is public in a public GitHub repos
 ## Platform validation still required
 
 Synthetic tests cannot establish the behavior of unattended model tasks, connector writes, Apps Script quotas, event-trigger merging, or real Google Sheets formula/text behavior. Those are deployment-gating checks, not assumptions.
+
+
+## Live platform smoke test
+
+A live alpha smoke test has now exercised the core model-worker path on the target platform:
+
+- the bound deterministic reconciler ran on schedule;
+- a synthetic, no-external-effect work item was validated and reserved;
+- a scheduled worker claimed exactly once;
+- the append-only claim ledger recorded the claim;
+- the worker created and delivered the required result artifact;
+- mechanical result validation passed;
+- the Executive reviewed and accepted the result;
+- the control plane transitioned from STEP to CONTINUOUS and the next reconcile reflected that mode.
+
+One platform quirk was observed: direct creation of a native Doc into the configured results folder was not supported by the connected OAuth/delegated Drive path used by the worker, so the worker created the Doc and moved it into the configured folder before delivery. Final folder placement was independently verified and the engine's mechanical check correctly passed.
+
+This validates the core agent/reconciler path only. It does not yet validate the deterministic Python runner, deployed HTTP API, event-doorbell path, or sustained production workload.
