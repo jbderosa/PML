@@ -2,7 +2,7 @@
 
 > **ALPHA SOFTWARE — experimental, incomplete, and not production-ready.**
 >
-> This public tree is a privacy-preserving reference projection of an actively reviewed control-plane prototype. It is not canonical deployment state, and it is intentionally not byte-for-byte identical to any private deployment bundle.
+> This public repository is a privacy-preserving reference projection of an actively reviewed control-plane prototype. It is not canonical deployment state and is intentionally not byte-for-byte identical to any private deployment bundle.
 
 PML separates work into three layers:
 
@@ -12,52 +12,31 @@ PML separates work into three layers:
 
 ## Alpha status
 
-The design has extensive synthetic tests, but real-platform validation is still required before unattended deployment. Known issues and independently reproduced findings are tracked in [`docs/ALPHA_AUDIT.md`](docs/ALPHA_AUDIT.md).
+The 2.6 implementation has undergone a code-level adversarial review. Major integrity mechanisms work in synthetic tests, but real-platform validation remains required and several reproducible alpha defects remain. See [`docs/ALPHA_AUDIT.md`](docs/ALPHA_AUDIT.md).
 
 ## Privacy boundary
 
-Only generic code, schemas, synthetic tests and rewritten documentation are published here. Real deployment state, personal workflows, identifiers, credentials, URLs, result artifacts and logs do not belong in this repository.
+Only generic, rewritten documentation and deliberately inactive examples are published directly in this repository at this stage. Real deployment state, personal workflows, identifiers, credentials, URLs, result artifacts and logs do not belong here.
+
+The reviewed source has also been sanitized into a separate alpha bundle, but it is **not installed as an active GitHub Actions deployment** and this repository does not currently claim to be a production-ready source release.
 
 See [`PUBLICATION_POLICY.md`](PUBLICATION_POLICY.md) and [`SANITIZATION.md`](SANITIZATION.md).
 
-## Layout
+## Currently published here
 
 | Path | Purpose |
 |---|---|
-| `src/` | storage-agnostic core, engine, and Google Apps Script adapter |
-| `runner/pml_runner/` | deterministic Python runner and network policy |
-| `runner/tests/` | Python tests using synthetic fixtures |
-| `test/` | JavaScript engine and adapter tests |
-| `tools/runner_usage_model.py` | runner-use model |
-| `examples/pml-runner.workflow.yml` | **inactive example** workflow; copy only after configuring a deployment |
 | `docs/ARCHITECTURE.md` | generic architecture summary |
-| `docs/ALPHA_AUDIT.md` | audit status and known limitations |
-
-## Tests
-
-```sh
-# JavaScript test files can be run individually
-node --test test/claims_ledger.test.js
-node --test test/injection.test.js
-node --test test/mech_check.test.js
-node --test test/py_commit.test.js
-node --test test/security_quota.test.js
-node --test test/sheetstore.test.js
-node --test test/growth.test.js
-
-# Python
-cd runner
-python -m pytest tests
-```
-
-The long-horizon simulation is intentionally separate:
-
-```sh
-node --test test/long/growth90.test.js
-```
+| `docs/ALPHA_AUDIT.md` | independent audit status and reproduced limitations |
+| `examples/pml-runner.workflow.yml` | **inactive example** workflow; not installed under `.github/workflows/` |
+| `tools/runner_usage_model.py` | generic runner-use/cost model |
+| `PUBLICATION_POLICY.md` | privacy-preserving publication rules |
+| `SECURITY.md` | alpha security notice |
+| `SANITIZATION.md` | differences applied to the public projection |
+| `VERSION` | public alpha version |
 
 ## Deployment warning
 
 Do not copy private configuration or state into this repository. In particular, do not commit API URLs, credentials, account/resource IDs, personal watchlists, real queue items, result documents, or production logs.
 
-The example workflow is intentionally not installed under `.github/workflows/`; publishing this source repository should not start a live scheduler.
+The runner workflow is intentionally published only as an example. Merely cloning this repository should not start a scheduler or create operational logs.
