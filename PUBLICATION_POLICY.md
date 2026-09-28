@@ -39,8 +39,8 @@ Before publication, remove or replace:
 
 Public examples should use synthetic fixtures and reserved/example values. Prefer:
 
-- `example.invalid` for domains;
-- `EXAMPLE_USER`, `EXAMPLE_WORKFLOW`, and similar neutral labels;
+- `example.invalid` for email/domain examples where possible;
+- neutral labels such as `EXAMPLE_USER` and `EXAMPLE_WORKFLOW`;
 - random synthetic IDs that are not derived from real IDs;
 - fabricated timestamps and content.
 

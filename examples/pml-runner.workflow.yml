@@ -1,0 +1,38 @@
+# PML deterministic runner example (v2.6 alpha). Copy into .github/workflows/ only after configuring a deployment.
+#  - no secrets or personal config in the repo; job params come from the engine at run time
+#  - the runner prints only counts/ids/error types (Actions logs of public repos are public)
+#  - no pull_request / fork triggers; GITHUB_TOKEN has no permissions
+# PRIVATE repos also work: set config.runner_repo_visibility=PRIVATE and the engine enforces the minute budget.
+name: pml-runner
+on:
+  workflow_dispatch: {}          # primary wake: engine dispatch (coalesced, one run covers all pending work)
+permissions: {}
+concurrency:
+  group: pml-runner
+  cancel-in-progress: false      # never two runners at once; a queued run waits
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Mark start (billing is measured from job start)
+        run: echo "PML_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: runner
+      - name: Run
+        working-directory: runner
+        env:
+          PML_API_URL: ${{ secrets.PML_API_URL }}
+          PML_PY_CREDENTIAL: ${{ secrets.PML_PY_CREDENTIAL }}
+          PML_ALLOWED_HOSTS: ${{ secrets.PML_ALLOWED_HOSTS }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          DOORBELL_TO: ${{ secrets.DOORBELL_TO }}
+          PML_TRIGGER: ${{ github.event_name == 'schedule' && 'schedule' || 'dispatch' }}
+          PML_RUN_ID: gh-${{ github.run_id }}-${{ github.run_attempt }}
+          PML_MAX_WALL_S: "420"
+        run: python3 -m pml_runner

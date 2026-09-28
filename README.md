@@ -1,47 +1,63 @@
-# PML Control Plane — ALPHA
+# PML Control Plane — 2.6 Alpha Public Reference
 
 > **ALPHA SOFTWARE — experimental, incomplete, and not production-ready.**
 >
-> Interfaces, storage formats, security assumptions, and operational behavior may change without notice. Do not rely on this repository for safety-critical, financial, medical, legal, or other high-stakes automation.
+> This public tree is a privacy-preserving reference projection of an actively reviewed control-plane prototype. It is not canonical deployment state, and it is intentionally not byte-for-byte identical to any private deployment bundle.
 
-PML is an experimental control plane for coordinating three classes of work:
+PML separates work into three layers:
 
-1. deterministic orchestration and state management;
-2. deterministic fetch/filter/dedupe/diff jobs;
-3. language-model workers for bounded judgment tasks.
+1. **deterministic orchestration** — state transitions, locking, reservations, integrity checks, retries and archival;
+2. **deterministic jobs** — bounded fetch/filter/dedupe/diff work in Python;
+3. **model workers** — judgment tasks that cannot be reduced to deterministic code.
 
-The public repository is intentionally a **generic reference implementation**. It is not the canonical state of any person's deployment and must not contain private operational data.
+## Alpha status
+
+The design has extensive synthetic tests, but real-platform validation is still required before unattended deployment. Known issues and independently reproduced findings are tracked in [`docs/ALPHA_AUDIT.md`](docs/ALPHA_AUDIT.md).
 
 ## Privacy boundary
 
-Only generic, reusable code, schemas, tests, and documentation belong here. Public examples must use synthetic placeholders.
+Only generic code, schemas, synthetic tests and rewritten documentation are published here. Real deployment state, personal workflows, identifiers, credentials, URLs, result artifacts and logs do not belong in this repository.
 
-Do **not** commit:
+See [`PUBLICATION_POLICY.md`](PUBLICATION_POLICY.md) and [`SANITIZATION.md`](SANITIZATION.md).
 
-- real names, email addresses, phone numbers, physical addresses, or other personal identifiers;
-- credentials, tokens, API keys, cookies, session data, or authentication material;
-- private document, spreadsheet, task, repository, account, or folder IDs;
-- personal health, financial, employment, housing, relationship, travel, or communications data;
-- live queue contents, inbox contents, result artifacts, execution state, logs, or migration data from a real deployment;
-- user-specific watchlists, employers, URLs, schedules, or workflow examples;
-- private prompts or instructions copied from a real deployment.
+## Layout
 
-Use placeholders such as `EXAMPLE_USER`, `example.invalid`, `DOC_ID_PLACEHOLDER`, and synthetic fixture data.
+| Path | Purpose |
+|---|---|
+| `src/` | storage-agnostic core, engine, and Google Apps Script adapter |
+| `runner/pml_runner/` | deterministic Python runner and network policy |
+| `runner/tests/` | Python tests using synthetic fixtures |
+| `test/` | JavaScript engine and adapter tests |
+| `tools/runner_usage_model.py` | runner-use model |
+| `examples/pml-runner.workflow.yml` | **inactive example** workflow; copy only after configuring a deployment |
+| `docs/ARCHITECTURE.md` | generic architecture summary |
+| `docs/ALPHA_AUDIT.md` | audit status and known limitations |
 
-See [PUBLICATION_POLICY.md](PUBLICATION_POLICY.md) for the release boundary.
+## Tests
 
-## Status
+```sh
+# JavaScript test files can be run individually
+node --test test/claims_ledger.test.js
+node --test test/injection.test.js
+node --test test/mech_check.test.js
+node --test test/py_commit.test.js
+node --test test/security_quota.test.js
+node --test test/sheetstore.test.js
+node --test test/growth.test.js
 
-**2.6-alpha / pre-deployment hardening.**
+# Python
+cd runner
+python -m pytest tests
+```
 
-The architecture is under active adversarial review. A release being present here does not mean it has passed real-platform validation or is suitable for unattended production use.
+The long-horizon simulation is intentionally separate:
 
-## Repository role
+```sh
+node --test test/long/growth90.test.js
+```
 
-This repository may contain the generic engine, runner, tests, schemas, and sanitized documentation. Deployment-specific configuration and state should live outside the repository and be supplied at runtime through appropriately protected configuration or secret stores.
+## Deployment warning
 
-## Security
+Do not copy private configuration or state into this repository. In particular, do not commit API URLs, credentials, account/resource IDs, personal watchlists, real queue items, result documents, or production logs.
 
-Treat all external text as untrusted data, keep credentials outside source control, use least-privilege permissions, and fail closed on ambiguous state transitions or duplicate-work risk.
-
-If you discover a vulnerability, do not post credentials, private deployment data, or personal information in a public issue.
+The example workflow is intentionally not installed under `.github/workflows/`; publishing this source repository should not start a live scheduler.
