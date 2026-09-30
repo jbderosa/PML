@@ -5,9 +5,27 @@ umask 077
 die(){ printf 'BLOCKED: %s\n' "$*" >&2; exit 1; }
 [[ "$EUID" -eq 0 ]] || die "run as root"
 
+sshd_bin="$(command -v sshd || true)"
+[[ -n "$sshd_bin" ]] || die "sshd is not installed"
+ssh_port="$("$sshd_bin" -T | awk '$1=="port"{print $2; exit}')"
+[[ "$ssh_port" =~ ^[0-9]+$ ]] || die "could not determine SSH port"
+
+# Never harden networking unless a public-key login path already exists and
+# password authentication is already off. This keeps the script fail-closed.
+root_key_count="$(awk 'NF && $1 ~ /^(ssh-|sk-)/ {n++} END {print n+0}' /root/.ssh/authorized_keys 2>/dev/null || true)"
+[[ "${root_key_count:-0}" -ge 1 ]] || die "no root authorized key is installed"
+
+effective_sshd="$("$sshd_bin" -T)"
+password_auth="$(printf '%s\n' "$effective_sshd" | awk '$1=="passwordauthentication"{print $2; exit}')"
+kbd_auth="$(printf '%s\n' "$effective_sshd" | awk '$1=="kbdinteractiveauthentication"{print $2; exit}')"
+permit_root="$(printf '%s\n' "$effective_sshd" | awk '$1=="permitrootlogin"{print $2; exit}')"
+[[ "$password_auth" == "no" ]] || die "PasswordAuthentication is not already disabled"
+[[ "$kbd_auth" == "no" ]] || die "KbdInteractiveAuthentication is not already disabled"
+[[ "$permit_root" == "prohibit-password" || "$permit_root" == "without-password" ]] || die "root login is not key-only"
+
 # Privacy gate: this design uses zram-only swap. Refuse to modify a host that
-# already has disk-backed swap configured or active; review that state first.
-non_zram_active="$(swapon --noheadings --raw --output=NAME 2>/dev/null | grep -v '^/dev/zram' || true)"
+# already has disk-backed swap configured or active.
+non_zram_active="$(awk 'NR>1 && $1 !~ /^\/dev\/zram/ {print $1}' /proc/swaps 2>/dev/null || true)"
 [[ -z "$non_zram_active" ]] || die "non-zram swap is active: $(printf '%s' "$non_zram_active" | tr '\n' ' ')"
 
 fstab_swap="$(awk '!/^[[:space:]]*#/ && NF>=3 && $3=="swap" {print $1}' /etc/fstab 2>/dev/null || true)"
@@ -22,33 +40,47 @@ apt-get install -y --no-install-recommends \
   unattended-upgrades
 
 # No disk-backed swap: compressed swap exists only in RAM.
-cat >/etc/default/zramswap <<'EOF'
+cat >/etc/default/zramswap <<'EOF_ZRAM'
 ALGO=lz4
 PERCENT=50
 PRIORITY=100
-EOF
-systemctl enable --now zramswap.service
-active_swap="$(swapon --noheadings --raw --output=NAME 2>/dev/null || true)"
+EOF_ZRAM
+systemctl enable zramswap.service
+systemctl restart zramswap.service
+active_swap="$(awk 'NR>1 {print $1}' /proc/swaps 2>/dev/null || true)"
 bad_swap="$(printf '%s\n' "$active_swap" | sed '/^$/d' | grep -v '^/dev/zram' || true)"
 [[ -z "$bad_swap" ]] || die "privacy gate failed; non-zram swap became active: $(printf '%s' "$bad_swap" | tr '\n' ' ')"
+printf '%s\n' "$active_swap" | grep -q '^/dev/zram' || die "zram swap did not become active"
 
-# Disable ordinary core-dump persistence.
+# Disable persistent capture of process memory on crashes. Ubuntu stable may
+# have Apport installed even when reporting is disabled, and a piped
+# kernel.core_pattern can bypass ordinary ulimit core-file controls.
 install -d -m 0755 /etc/systemd/coredump.conf.d
-cat >/etc/systemd/coredump.conf.d/99-pml-privacy.conf <<'EOF'
+cat >/etc/systemd/coredump.conf.d/99-pml-privacy.conf <<'EOF_COREDUMP'
 [Coredump]
 Storage=none
 ProcessSizeMax=0
-EOF
-cat >/etc/security/limits.d/99-pml-no-core.conf <<'EOF'
+EOF_COREDUMP
+cat >/etc/security/limits.d/99-pml-no-core.conf <<'EOF_LIMITS'
 * hard core 0
 * soft core 0
-EOF
-cat >/etc/sysctl.d/99-pml-privacy.conf <<'EOF'
+EOF_LIMITS
+if [[ -f /etc/default/apport ]]; then
+  if grep -q '^enabled=' /etc/default/apport; then
+    sed -i 's/^enabled=.*/enabled=0/' /etc/default/apport
+  else
+    printf '\nenabled=0\n' >>/etc/default/apport
+  fi
+fi
+cat >/etc/sysctl.d/99-pml-privacy.conf <<'EOF_SYSCTL'
 fs.suid_dumpable=0
 kernel.dmesg_restrict=1
 kernel.kptr_restrict=2
-EOF
+kernel.core_pattern=|/bin/false
+EOF_SYSCTL
 sysctl --system >/dev/null
+[[ "$(cat /proc/sys/fs/suid_dumpable)" == "0" ]] || die "fs.suid_dumpable hardening did not apply"
+[[ "$(cat /proc/sys/kernel/core_pattern)" == "|/bin/false" ]] || die "core dump discard handler did not apply"
 
 # Separate service identities. None receives login or sudo rights.
 ensure_service_user(){
@@ -69,26 +101,21 @@ for spec in "pml:pmlsvc" "pil:pilsvc" "coord:coordsvc"; do
   install -d -m 0750 -o root -g "$user" "/etc/$name"
 done
 
-# /run is memory-backed on supported Ubuntu hosts. Runtime secrets live here.
-cat >/etc/tmpfiles.d/pml-shared-services.conf <<'EOF'
+# /run is memory-backed on this Ubuntu host. Runtime secrets live here.
+cat >/etc/tmpfiles.d/pml-shared-services.conf <<'EOF_TMPFILES'
 d /run/pml 0750 pmlsvc pmlsvc -
 d /run/pml/secrets 0700 pmlsvc pmlsvc -
 d /run/pil 0750 pilsvc pilsvc -
 d /run/pil/secrets 0700 pilsvc pilsvc -
 d /run/coord 0750 coordsvc coordsvc -
 d /run/coord/secrets 0700 coordsvc coordsvc -
-EOF
+EOF_TMPFILES
 systemd-tmpfiles --create /etc/tmpfiles.d/pml-shared-services.conf
 findmnt -n -T /run -o FSTYPE | grep -Eq '^(tmpfs|ramfs)$' || die "/run is not memory-backed"
 
-# Keep password SSH disabled. Recovery Console remains out-of-band.
-sshd_bin="$(command -v sshd || true)"
-[[ -n "$sshd_bin" ]] || die "sshd is not installed"
-ssh_port="$("$sshd_bin" -T | awk '$1=="port"{print $2; exit}')"
-[[ "$ssh_port" =~ ^[0-9]+$ ]] || die "could not determine SSH port"
-
+# Keep password SSH disabled and preserve Ubuntu 24.04 socket activation.
 install -d -m 0755 /etc/ssh/sshd_config.d
-cat >/etc/ssh/sshd_config.d/90-pml-foundation.conf <<'EOF'
+cat >/etc/ssh/sshd_config.d/00-pml-hardening.conf <<'EOF_SSH'
 PubkeyAuthentication yes
 PasswordAuthentication no
 KbdInteractiveAuthentication no
@@ -96,32 +123,45 @@ PermitEmptyPasswords no
 PermitRootLogin prohibit-password
 X11Forwarding no
 AllowAgentForwarding no
+AllowTcpForwarding no
 PermitTunnel no
 MaxAuthTries 3
 LoginGraceTime 30
-EOF
+EOF_SSH
+rm -f /etc/ssh/sshd_config.d/90-pml-foundation.conf
 "$sshd_bin" -t
+
+effective_sshd="$("$sshd_bin" -T)"
+[[ "$(printf '%s\n' "$effective_sshd" | awk '$1=="passwordauthentication"{print $2; exit}')" == "no" ]] || die "effective SSH config permits passwords"
+[[ "$(printf '%s\n' "$effective_sshd" | awk '$1=="permitrootlogin"{print $2; exit}')" == "prohibit-password" ]] || die "effective root SSH is not key-only"
 
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow "$ssh_port/tcp" comment 'PML key-only SSH'
 ufw --force enable
-systemctl enable ssh
-systemctl restart ssh
 
-# Explicitly retain Ubuntu's daily security-update path; do not auto-reboot.
-cat >/etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
+# Noble uses socket-activated OpenSSH by default. Keep the socket enabled and
+# reload the currently active daemon without converting boot activation modes.
+systemctl enable --now ssh.socket
+systemctl reload ssh.service
+systemctl is-active --quiet ssh.socket || die "ssh.socket is not active"
+ss -lntH | awk '{print $4}' | grep -Eq "(^|:)${ssh_port}$" || die "SSH is no longer listening on the expected port"
+
+# Retain Ubuntu's daily security-update path; do not auto-reboot.
+cat >/etc/apt/apt.conf.d/20auto-upgrades <<'EOF_UPDATES'
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
-EOF
-cat >/etc/apt/apt.conf.d/52pml-no-auto-reboot <<'EOF'
+EOF_UPDATES
+cat >/etc/apt/apt.conf.d/52pml-no-auto-reboot <<'EOF_REBOOT'
 Unattended-Upgrade::Automatic-Reboot "false";
-EOF
+EOF_REBOOT
 
-printf 'PML_OS_FOUNDATION_V1_OK\n'
+printf 'PML_OS_FOUNDATION_V2_OK\n'
 printf 'ssh_port=%s\n' "$ssh_port"
 printf 'swap=\n'
-swapon --show --noheadings --output=NAME,TYPE,SIZE,USED,PRIO || true
+cat /proc/swaps
 printf 'ufw=\n'
 ufw status verbose
 printf 'runtime_fs=%s\n' "$(findmnt -n -T /run -o FSTYPE)"
+printf 'core_pattern=%s\n' "$(cat /proc/sys/kernel/core_pattern)"
+printf 'ssh_socket=%s/%s\n' "$(systemctl is-enabled ssh.socket 2>/dev/null || true)" "$(systemctl is-active ssh.socket 2>/dev/null || true)"
