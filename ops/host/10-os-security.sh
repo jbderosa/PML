@@ -7,7 +7,9 @@ die(){ printf 'BLOCKED: %s\n' "$*" >&2; exit 1; }
 
 sshd_bin="$(command -v sshd || true)"
 [[ -n "$sshd_bin" ]] || die "sshd is not installed"
-ssh_port="$("$sshd_bin" -T | awk '$1=="port"{print $2; exit}')"
+effective_sshd="$("$sshd_bin" -T)"
+get_sshd(){ awk -v k="$1" '$1==k{print $2; exit}' <<<"$effective_sshd"; }
+ssh_port="$(get_sshd port)"
 [[ "$ssh_port" =~ ^[0-9]+$ ]] || die "could not determine SSH port"
 
 # Never harden networking unless a public-key login path already exists and
@@ -15,10 +17,9 @@ ssh_port="$("$sshd_bin" -T | awk '$1=="port"{print $2; exit}')"
 root_key_count="$(grep -Ec '(^|[[:space:]])(ssh-[A-Za-z0-9-]+|sk-[A-Za-z0-9@._+-]+)[[:space:]]' /root/.ssh/authorized_keys 2>/dev/null || true)"
 [[ "${root_key_count:-0}" -ge 1 ]] || die "no root authorized key is installed"
 
-effective_sshd="$("$sshd_bin" -T)"
-password_auth="$(printf '%s\n' "$effective_sshd" | awk '$1=="passwordauthentication"{print $2; exit}')"
-kbd_auth="$(printf '%s\n' "$effective_sshd" | awk '$1=="kbdinteractiveauthentication"{print $2; exit}')"
-permit_root="$(printf '%s\n' "$effective_sshd" | awk '$1=="permitrootlogin"{print $2; exit}')"
+password_auth="$(get_sshd passwordauthentication)"
+kbd_auth="$(get_sshd kbdinteractiveauthentication)"
+permit_root="$(get_sshd permitrootlogin)"
 [[ "$password_auth" == "no" ]] || die "PasswordAuthentication is not already disabled"
 [[ "$kbd_auth" == "no" ]] || die "KbdInteractiveAuthentication is not already disabled"
 [[ "$permit_root" == "prohibit-password" || "$permit_root" == "without-password" ]] || die "root login is not key-only"
@@ -59,7 +60,7 @@ systemctl restart zramswap.service
 active_swap="$(awk 'NR>1 {print $1}' /proc/swaps 2>/dev/null || true)"
 bad_swap="$(printf '%s\n' "$active_swap" | sed '/^$/d' | grep -v '^/dev/zram' || true)"
 [[ -z "$bad_swap" ]] || die "privacy gate failed; non-zram swap became active: $(printf '%s' "$bad_swap" | tr '\n' ' ')"
-printf '%s\n' "$active_swap" | grep -q '^/dev/zram' || die "zram swap did not become active"
+grep -q '^/dev/zram' <<<"$active_swap" || die "zram swap did not become active"
 
 # Disable persistent capture of process memory on crashes. Ubuntu stable may
 # have Apport installed even when reporting is disabled, and a piped
@@ -127,7 +128,8 @@ d /run/coord 0750 coordsvc coordsvc -
 d /run/coord/secrets 0700 coordsvc coordsvc -
 EOF_TMPFILES
 systemd-tmpfiles --create /etc/tmpfiles.d/architect-shared-services.conf
-findmnt -n -T /run -o FSTYPE | grep -Eq '^(tmpfs|ramfs)$' || die "/run is not memory-backed"
+runtime_fs="$(findmnt -n -T /run -o FSTYPE)"
+[[ "$runtime_fs" == "tmpfs" || "$runtime_fs" == "ramfs" ]] || die "/run is not memory-backed"
 
 # Keep password SSH disabled and preserve Ubuntu 24.04 socket activation.
 install -d -m 0755 /etc/ssh/sshd_config.d
@@ -148,8 +150,8 @@ EOF_SSH
 "$sshd_bin" -t
 
 effective_sshd="$("$sshd_bin" -T)"
-[[ "$(printf '%s\n' "$effective_sshd" | awk '$1=="passwordauthentication"{print $2; exit}')" == "no" ]] || die "effective SSH config permits passwords"
-permit_root="$(printf '%s\n' "$effective_sshd" | awk '$1=="permitrootlogin"{print $2; exit}')"
+[[ "$(get_sshd passwordauthentication)" == "no" ]] || die "effective SSH config permits passwords"
+permit_root="$(get_sshd permitrootlogin)"
 [[ "$permit_root" == "prohibit-password" || "$permit_root" == "without-password" ]] || die "effective root SSH is not key-only"
 
 ufw default deny incoming
