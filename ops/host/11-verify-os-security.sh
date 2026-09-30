@@ -53,13 +53,15 @@ pass "key-only socket-activated SSH listening on port $ssh_port"
 ufw_text="$(ufw status verbose)"
 printf '%s\n' "$ufw_text" | grep -q '^Status: active$' || die "UFW inactive"
 printf '%s\n' "$ufw_text" | grep -q 'Default: deny (incoming), allow (outgoing)' || die "UFW defaults are not deny-in/allow-out"
-ufw status | awk -v p="$ssh_port/tcp" '
-  /^Status:/ || /^To[[:space:]]+Action/ || /^--/ || /^[[:space:]]*$/ {next}
-  $2=="ALLOW" && $3=="IN" && ($1==p || $1=="'"$ssh_port"'") {next}
-  $2=="ALLOW" && $3=="IN" && ($1==(p" (v6)") || $1==("'"$ssh_port"'" " (v6)")) {next}
-  {bad=1; print "unexpected_ufw_rule=" $0 > "/dev/stderr"}
-  END {exit bad}
-' || die "unexpected UFW rule present"
+ufw status | awk -v p="$ssh_port/tcp" -v pn="$ssh_port" '
+  $1==p && $2=="ALLOW" && $3=="IN" {ssh_rules++; next}
+  $1==pn && $2=="ALLOW" && $3=="IN" {ssh_rules++; next}
+  $1==p && $2=="(v6)" && $3=="ALLOW" && $4=="IN" {ssh_rules++; next}
+  $1==pn && $2=="(v6)" && $3=="ALLOW" && $4=="IN" {ssh_rules++; next}
+  $2=="ALLOW" && $3=="IN" {bad=1; print "unexpected_ufw_rule=" $0 > "/dev/stderr"}
+  $3=="ALLOW" && $4=="IN" {bad=1; print "unexpected_ufw_rule=" $0 > "/dev/stderr"}
+  END {if (ssh_rules < 1 || bad) exit 1}
+' || die "SSH-only UFW rule verification failed"
 pass "UFW default-deny with SSH-only inbound rule"
 
 check_path(){
