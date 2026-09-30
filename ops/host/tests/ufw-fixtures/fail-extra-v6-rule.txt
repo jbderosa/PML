@@ -1,0 +1,10 @@
+Status: active
+Logging: on (low)
+Default: deny (incoming), allow (outgoing), disabled (routed)
+New profiles: skip
+
+To                         Action      From
+--                         ------      ----
+22/tcp                     ALLOW IN    Anywhere                   # Architect key-only SSH
+22/tcp (v6)                ALLOW IN    Anywhere (v6)              # Architect key-only SSH
+443/tcp (v6)               ALLOW IN    Anywhere (v6)
