@@ -18,7 +18,7 @@ findmnt -n -o SOURCE,FSTYPE,OPTIONS /
 printf 'disk_root='
 df -B1 --output=size,used,avail,pcent / | tail -n1 | xargs
 printf 'swap_begin\n'
-swapon --show --bytes --noheadings --output=NAME,TYPE,SIZE,USED,PRIO || true
+swapon --show=NAME,TYPE,SIZE,USED,PRIO --bytes --noheadings || true
 printf 'swap_end\n'
 printf 'listeners_begin\n'
 ss -lntupH 2>/dev/null | awk '{print $1,$5}' | sort -u || true
@@ -28,6 +28,8 @@ systemctl --failed --no-legend --plain 2>/dev/null || true
 printf 'failed_units_end\n'
 printf 'ssh_enabled=%s\n' "$(systemctl is-enabled ssh 2>/dev/null || true)"
 printf 'ssh_active=%s\n' "$(systemctl is-active ssh 2>/dev/null || true)"
+printf 'ssh_socket_enabled=%s\n' "$(systemctl is-enabled ssh.socket 2>/dev/null || true)"
+printf 'ssh_socket_active=%s\n' "$(systemctl is-active ssh.socket 2>/dev/null || true)"
 printf 'ufw_status=%s\n' "$(ufw status 2>/dev/null | head -n1 || true)"
 printf 'docker_present=%s\n' "$(command -v docker >/dev/null 2>&1 && echo yes || echo no)"
 printf 'compose_present=%s\n' "$(docker compose version >/dev/null 2>&1 && echo yes || echo no)"
