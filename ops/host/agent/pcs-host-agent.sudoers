@@ -1,2 +1,2 @@
 # Managed by pcs-host-agent bootstrap. API has no arbitrary sudo capability.
-coord-svc ALL=(root) NOPASSWD: /usr/local/libexec/pcs-host-agent-runner status *, /usr/local/libexec/pcs-host-agent-runner verify_os *, /usr/local/libexec/pcs-host-agent-runner apply_os_security *, /usr/local/libexec/pcs-host-agent-runner install_kernel_virtual *, /usr/local/libexec/pcs-host-agent-runner reboot *
+coordsvc ALL=(root) NOPASSWD: /usr/local/libexec/pcs-host-agent-runner status *, /usr/local/libexec/pcs-host-agent-runner verify_os *, /usr/local/libexec/pcs-host-agent-runner apply_os_security *, /usr/local/libexec/pcs-host-agent-runner install_kernel_virtual *, /usr/local/libexec/pcs-host-agent-runner reboot *
