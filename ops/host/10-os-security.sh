@@ -91,6 +91,12 @@ if [[ -f /etc/default/apport ]]; then
     printf '\nenabled=0\n' >>/etc/default/apport
   fi
 fi
+# On Ubuntu 24.04, apport.service runs after systemd-sysctl at every boot and
+# rewrites kernel.core_pattern and fs.suid_dumpable regardless of
+# /etc/default/apport, silently undoing the sysctls below. Mask it.
+if systemctl cat apport.service >/dev/null 2>&1; then
+  systemctl mask --now apport.service
+fi
 cat >/etc/sysctl.d/99-architect-privacy.conf <<'EOF_SYSCTL'
 fs.suid_dumpable=0
 kernel.dmesg_restrict=1

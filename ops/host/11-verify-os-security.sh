@@ -49,6 +49,10 @@ pass "/run is memory-backed ($runtime_fs)"
 if [[ -f /etc/default/apport ]]; then
   ! grep -Eq '^enabled=1([[:space:]]*)$' /etc/default/apport || die "Apport is enabled"
 fi
+# apport.service rewrites core_pattern/suid_dumpable at boot unless masked.
+if systemctl cat apport.service >/dev/null 2>&1; then
+  [[ "$(systemctl is-enabled apport.service 2>/dev/null || true)" == "masked" ]] || die "apport.service is not masked; it resets core-dump sysctls at boot"
+fi
 grep -q '^Storage=none$' /etc/systemd/coredump.conf.d/99-architect-privacy.conf || die "systemd coredump storage is not disabled"
 grep -q '^ProcessSizeMax=0$' /etc/systemd/coredump.conf.d/99-architect-privacy.conf || die "systemd coredump processing is not disabled"
 pass "core-memory persistence disabled"
