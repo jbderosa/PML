@@ -45,9 +45,9 @@ Use row-version checks and database constraints so stale command application fai
 
 Public source control contains only generic schemas, code, synthetic fixtures, and documentation. Real deployment identifiers, personal data, live state, logs, URLs, credentials, migration snapshots, and result artifacts must remain outside the repository.
 
-Persisted personal information must be application-encrypted before production cutover. Service keys are separate by trust domain and must not be stored in Git, ordinary logs, packet/result payloads, database tables in plaintext, or backup archives.
+Persisted personal information must be application-encrypted before any real-data shadow import or production cutover. The import staging schema itself rejects plaintext source cells. Service keys are separate by trust domain and must not be stored in Git, ordinary logs, packet/result payloads, database tables in plaintext, or backup archives.
 
-Swap must be encrypted. Logs and crash dumps must not contain plaintext personal information. Off-host backups must be encrypted before leaving the host.
+Source cells are encrypted before database persistence with an authenticated application cipher. The initial codec uses AES-256-GCM with a fresh random 96-bit IV per cell and AAD binding the schema version, table, source row, and column. Only key identifiers are persisted; key bytes are supplied at runtime. Empty source cells are encrypted too, so NULL/plaintext does not become a bypass. Row and table parity values use HMAC-SHA-256 under a separate digest key rather than unsalted hashes, avoiding dictionary leakage from low-entropy fields. Swap must be encrypted. Logs and crash dumps must not contain plaintext personal information. Off-host backups must be encrypted before leaving the host.
 
 ## Trust domains
 
@@ -65,11 +65,11 @@ A shadow milestone is not complete until:
 
 - every expected table is present;
 - source and imported row counts match;
-- canonical per-table digests match;
+- canonical per-table keyed HMACs match;
 - claim and event chains verify to the recorded source heads;
 - restart does not lose or duplicate imported state;
 - malformed, stale, duplicate, and unauthorized writes fail closed;
-- backup restore reproduces the same counts, chain heads, and canonical digest;
+- database constraints reject plaintext staging cells;\n- backup restore reproduces the same counts, chain heads, and canonical keyed HMAC;
 - the shadow remains unable to become a production writer accidentally.
 
 ## Rollback posture
