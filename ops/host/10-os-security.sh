@@ -149,7 +149,8 @@ EOF_SSH
 
 effective_sshd="$("$sshd_bin" -T)"
 [[ "$(printf '%s\n' "$effective_sshd" | awk '$1=="passwordauthentication"{print $2; exit}')" == "no" ]] || die "effective SSH config permits passwords"
-[[ "$(printf '%s\n' "$effective_sshd" | awk '$1=="permitrootlogin"{print $2; exit}')" == "prohibit-password" ]] || die "effective root SSH is not key-only"
+permit_root="$(printf '%s\n' "$effective_sshd" | awk '$1=="permitrootlogin"{print $2; exit}')"
+[[ "$permit_root" == "prohibit-password" || "$permit_root" == "without-password" ]] || die "effective root SSH is not key-only"
 
 ufw default deny incoming
 ufw default allow outgoing
