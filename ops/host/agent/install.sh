@@ -10,16 +10,15 @@ fi
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PORT="${PCS_HOST_AGENT_PORT:-8443}"
 
-id coord-svc >/dev/null 2>&1 || { echo "coord-svc user missing; run OS foundation first" >&2; exit 1; }
+id coordsvc >/dev/null 2>&1 || { echo "coordsvc user missing; run OS foundation first" >&2; exit 1; }
 command -v python3 >/dev/null
 command -v openssl >/dev/null
-command -v ufw >/dev/null
 command -v visudo >/dev/null
 command -v curl >/dev/null
 command -v ss >/dev/null
 
-install -d -o root -g coord-svc -m 0750 /etc/pcs-host-agent /etc/pcs-host-agent/tls
-install -d -o coord-svc -g coord-svc -m 0700 /var/lib/pcs-host-agent /var/lib/pcs-host-agent/requests /var/lib/pcs-host-agent/locks
+install -d -o root -g coordsvc -m 0750 /etc/pcs-host-agent /etc/pcs-host-agent/tls
+install -d -o coordsvc -g coordsvc -m 0700 /var/lib/pcs-host-agent /var/lib/pcs-host-agent/requests /var/lib/pcs-host-agent/locks
 install -d -o root -g root -m 0755 /usr/local/libexec/pcs-host-agent
 
 install -o root -g root -m 0755 "$SRC_DIR/agent.py" /usr/local/libexec/pcs-host-agent/agent.py
@@ -30,7 +29,7 @@ install -o root -g root -m 0755 "$SRC_DIR/../11-verify-os-security.sh" /usr/loca
 if [[ ! -s /etc/pcs-host-agent/auth.token ]]; then
   openssl rand -hex 32 >/etc/pcs-host-agent/auth.token
 fi
-chown root:coord-svc /etc/pcs-host-agent/auth.token
+chown root:coordsvc /etc/pcs-host-agent/auth.token
 chmod 0640 /etc/pcs-host-agent/auth.token
 
 if [[ ! -s /etc/pcs-host-agent/tls/ca.crt || ! -s /etc/pcs-host-agent/tls/server.crt || ! -s /etc/pcs-host-agent/tls/server.key ]]; then
@@ -62,7 +61,7 @@ if [[ ! -s /etc/pcs-host-agent/tls/ca.crt || ! -s /etc/pcs-host-agent/tls/server
   openssl genrsa -out /etc/pcs-host-agent/tls/server.key 3072 >/dev/null 2>&1
   openssl req -new -key /etc/pcs-host-agent/tls/server.key -out "$tmp/server.csr" -config "$tmp/server.cnf"
   openssl x509 -req -in "$tmp/server.csr" -CA /etc/pcs-host-agent/tls/ca.crt -CAkey "$tmp/ca.key" -CAcreateserial -out /etc/pcs-host-agent/tls/server.crt -days 825 -sha256 -extensions req_ext -extfile "$tmp/server.cnf"
-  chown root:coord-svc /etc/pcs-host-agent/tls/server.key /etc/pcs-host-agent/tls/server.crt /etc/pcs-host-agent/tls/ca.crt
+  chown root:coordsvc /etc/pcs-host-agent/tls/server.key /etc/pcs-host-agent/tls/server.crt /etc/pcs-host-agent/tls/ca.crt
   chmod 0640 /etc/pcs-host-agent/tls/server.key
   chmod 0644 /etc/pcs-host-agent/tls/server.crt /etc/pcs-host-agent/tls/ca.crt
 fi
@@ -73,9 +72,6 @@ install -o root -g root -m 0644 "$SRC_DIR/pcs-host-agent.service" /etc/systemd/s
 
 systemctl daemon-reload
 systemctl enable --now pcs-host-agent.service
-if ! ufw status | grep -Eq "^${PORT}/tcp[[:space:]]+LIMIT"; then
-  ufw limit "${PORT}/tcp" comment 'pcs-host-agent' >/dev/null
-fi
 
 sleep 1
 systemctl is-active --quiet pcs-host-agent.service
