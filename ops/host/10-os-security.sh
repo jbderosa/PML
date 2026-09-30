@@ -164,7 +164,8 @@ ufw --force enable
 systemctl enable --now ssh.socket
 systemctl reload ssh.service
 systemctl is-active --quiet ssh.socket || die "ssh.socket is not active"
-ss -lntH | awk '{print $4}' | grep -Eq "(^|:)${ssh_port}$" || die "SSH is no longer listening on the expected port"
+listeners="$(ss -lntH)"
+awk -v p="$ssh_port" '$4 ~ ("(^|:)" p "$") {found=1} END {exit !found}' <<<"$listeners" || die "SSH is no longer listening on the expected port"
 
 # Retain Ubuntu's daily security-update path; do not auto-reboot.
 cat >/etc/apt/apt.conf.d/20auto-upgrades <<'EOF_UPDATES'
