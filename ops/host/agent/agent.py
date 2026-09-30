@@ -10,7 +10,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-LISTEN_HOST = os.environ.get('PCS_HOST_AGENT_HOST', '0.0.0.0')
+LISTEN_HOST = os.environ.get('PCS_HOST_AGENT_HOST', '127.0.0.1')
 LISTEN_PORT = int(os.environ.get('PCS_HOST_AGENT_PORT', '8443'))
 TOKEN_FILE = Path(os.environ.get('PCS_HOST_AGENT_TOKEN_FILE', '/etc/pcs-host-agent/auth.token'))
 CERT_FILE = os.environ.get('PCS_HOST_AGENT_CERT_FILE', '/etc/pcs-host-agent/tls/server.crt')
