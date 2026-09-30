@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Generate the lossless PostgreSQL staging schema used by the v2.8 shadow import.
+ * Generate the encrypted PostgreSQL staging schema used by the v2.8 shadow import.
  *
  * This tool consumes only the sanitized header manifest. It never reads live
- * deployment state. Source cell values are stored as TEXT during staging so the
- * first import can prove row-count/digest parity before type coercion.
+ * deployment state. Every source cell must be application ciphertext before it
+ * is persisted. Plaintext may exist only transiently inside the importer process.
  */
 
 import fs from "node:fs";
@@ -52,7 +52,8 @@ for (const [name, columns] of Object.entries(tables)) {
 
 const out = [];
 out.push("-- Generated from db/source-schema-manifest.json.");
-out.push("-- Lossless staging only: source values remain TEXT until parity is proven.");
+out.push("-- Encrypted staging only: every persisted source cell must be enc:v1 ciphertext.");
+out.push("-- Plaintext is permitted only transiently inside the importer process.");
 out.push("BEGIN;");
 out.push("CREATE SCHEMA IF NOT EXISTS pml_import;");
 out.push("");
@@ -61,10 +62,12 @@ out.push(`CREATE TABLE IF NOT EXISTS pml_import.import_batches (
   source_schema_version integer NOT NULL,
   source_snapshot_label text NOT NULL,
   manifest_sha256 char(64) NOT NULL,
+  encryption_key_id text NOT NULL,
+  digest_key_id text NOT NULL,
   claims_chain_head text,
   events_chain_head text,
   source_table_counts jsonb NOT NULL DEFAULT '{}'::jsonb,
-  source_table_digests jsonb NOT NULL DEFAULT '{}'::jsonb,
+  source_table_hmacs jsonb NOT NULL DEFAULT '{}'::jsonb,
   status text NOT NULL CHECK (status IN ('IMPORTING','IMPORTED','VERIFIED','REJECTED')),
   created_at timestamptz NOT NULL DEFAULT now(),
   verified_at timestamptz
@@ -75,8 +78,10 @@ for (const [name, columns] of Object.entries(tables)) {
   const defs = [
     "batch_id uuid NOT NULL REFERENCES pml_import.import_batches(batch_id) ON DELETE RESTRICT",
     "source_row bigint NOT NULL CHECK (source_row >= 2)",
-    ...columns.map((column) => `${q(column)} text`),
-    "row_digest char(64) NOT NULL",
+    ...columns.map((column) =>
+      `${q(column)} text NOT NULL CHECK (${q(column)} LIKE 'enc:v1:%')`
+    ),
+    "row_hmac char(64) NOT NULL CHECK (row_hmac ~ '^[0-9a-f]{64}$')",
     "PRIMARY KEY (batch_id, source_row)",
   ];
 
