@@ -39,7 +39,7 @@ sshd_bin="$(command -v sshd || true)"
 [[ -n "$sshd_bin" ]] || die "sshd missing"
 "$sshd_bin" -t
 effective_sshd="$("$sshd_bin" -T)"
-get_sshd(){ printf '%s\n' "$effective_sshd" | awk -v k="$1" '$1==k{print $2; exit}'; }
+get_sshd(){ awk -v k="$1" '$1==k{print $2; exit}' <<<"$effective_sshd"; }
 ssh_port="$(get_sshd port)"
 [[ "$(get_sshd passwordauthentication)" == "no" ]] || die "SSH password auth enabled"
 [[ "$(get_sshd kbdinteractiveauthentication)" == "no" ]] || die "SSH keyboard-interactive auth enabled"
@@ -52,8 +52,51 @@ ss -lntH | awk '{print $4}' | grep -Eq "(^|:)${ssh_port}$" || die "SSH not liste
 pass "key-only socket-activated SSH listening on port $ssh_port"
 
 ufw_text="$(ufw status verbose)"
-printf '%s\n' "$ufw_text" | grep -q '^Status: active$' || die "UFW inactive"
-printf '%s\n' "$ufw_text" | grep -q 'Default: deny (incoming), allow (outgoing)' || die "UFW defaults are not deny-in/allow-out"
+grep -q '^Status: active
+ufw status | awk -v p="$ssh_port/tcp" -v pn="$ssh_port" '
+  $1==p && $2=="ALLOW" && $3=="IN" {ssh_rules++; next}
+  $1==pn && $2=="ALLOW" && $3=="IN" {ssh_rules++; next}
+  $1==p && $2=="(v6)" && $3=="ALLOW" && $4=="IN" {ssh_rules++; next}
+  $1==pn && $2=="(v6)" && $3=="ALLOW" && $4=="IN" {ssh_rules++; next}
+  $2=="ALLOW" && $3=="IN" {bad=1; print "unexpected_ufw_rule=" $0 > "/dev/stderr"}
+  $3=="ALLOW" && $4=="IN" {bad=1; print "unexpected_ufw_rule=" $0 > "/dev/stderr"}
+  END {if (ssh_rules < 1 || bad) exit 1}
+' || die "SSH-only UFW rule verification failed"
+pass "UFW default-deny with SSH-only inbound rule"
+
+check_path(){
+  local path="$1" expected="$2" actual
+  actual="$(stat -c '%U:%G:%a' "$path")"
+  [[ "$actual" == "$expected" ]] || die "$path expected $expected got $actual"
+}
+for spec in "pml:pmlsvc" "pil:pilsvc" "coord:coordsvc"; do
+  name="${spec%%:*}"
+  user="${spec##*:}"
+  shell="$(getent passwd "$user" | cut -d: -f7)"
+  [[ "$shell" == "/usr/sbin/nologin" ]] || die "$user has login shell $shell"
+  ! id -nG "$user" | tr ' ' '\n' | grep -qx sudo || die "$user is in sudo group"
+  check_path "/srv/$name" "root:root:755"
+  check_path "/srv/$name/app" "root:root:755"
+  check_path "/srv/$name/state" "$user:$user:700"
+  check_path "/srv/$name/artifacts" "$user:$user:700"
+  check_path "/etc/$name" "root:$user:750"
+  check_path "/run/$name" "$user:$user:750"
+  check_path "/run/$name/secrets" "$user:$user:700"
+  [[ -z "$(find "/srv/$name/state" "/srv/$name/artifacts" "/run/$name/secrets" -mindepth 1 -print -quit)" ]] || die "$name private paths are not empty before data migration"
+done
+pass "PML/PIL/coordinator service identities and paths are isolated and empty"
+
+# Nothing database-like or application-like should be listening yet.
+postgres_count="$(ss -lntH | awk '$4 ~ /:5432$/ {n++} END {print n+0}')"
+[[ "$postgres_count" == "0" ]] || die "PostgreSQL is listening before runtime milestone"
+pass "no PostgreSQL listener"
+
+printf 'listeners_begin\n'
+ss -lntupH 2>/dev/null | awk '{print $1,$5}' | sort -u || true
+printf 'listeners_end\n'
+printf 'ARCHITECT_OS_FOUNDATION_VERIFY_PASS\n'
+ <<<"$ufw_text" || die "UFW inactive"
+grep -q 'Default: deny (incoming), allow (outgoing)' <<<"$ufw_text" || die "UFW defaults are not deny-in/allow-out"
 ufw status | awk -v p="$ssh_port/tcp" -v pn="$ssh_port" '
   $1==p && $2=="ALLOW" && $3=="IN" {ssh_rules++; next}
   $1==pn && $2=="ALLOW" && $3=="IN" {ssh_rules++; next}
