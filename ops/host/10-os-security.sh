@@ -39,6 +39,15 @@ apt-get install -y --no-install-recommends \
   zram-tools \
   unattended-upgrades
 
+# Minimal cloud images can omit the zram kernel module even when zram-tools is
+# available. Install the matching extra-module package only when needed.
+if ! modprobe zram >/dev/null 2>&1; then
+  kernel_extra_pkg="linux-modules-extra-$(uname -r)"
+  apt-cache show "$kernel_extra_pkg" >/dev/null 2>&1 || die "zram module missing and $kernel_extra_pkg is unavailable"
+  apt-get install -y --no-install-recommends "$kernel_extra_pkg"
+  modprobe zram >/dev/null 2>&1 || die "zram module still unavailable after installing $kernel_extra_pkg"
+fi
+
 # No disk-backed swap: compressed swap exists only in RAM.
 cat >/etc/default/zramswap <<'EOF_ZRAM'
 ALGO=lz4
