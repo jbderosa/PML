@@ -18,7 +18,7 @@ findmnt -n -o SOURCE,FSTYPE,OPTIONS /
 printf 'disk_root='
 df -B1 --output=size,used,avail,pcent / | tail -n1 | xargs
 printf 'swap_begin\n'
-swapon --show=NAME,TYPE,SIZE,USED,PRIO --bytes --noheadings || true
+tail -n +2 /proc/swaps || true
 printf 'swap_end\n'
 printf 'listeners_begin\n'
 ss -lntupH 2>/dev/null | awk '{print $1,$5}' | sort -u || true
