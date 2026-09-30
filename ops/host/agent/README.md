@@ -5,8 +5,9 @@ This is a bootstrap/operations bridge for agents that cannot retain SSH access. 
 ## Security model
 
 - HTTPS only; bootstrap generates a local CA and server certificate.
+- The service binds to `127.0.0.1` by default and the installer does not open a firewall port. Remote management requires a separately reviewed private-ingress design.
 - 256-bit bearer token generated on-host; token value is never committed.
-- API runs as `coord-svc`, not root.
+- API runs as `coordsvc`, not root.
 - Root authority is reachable only through one exact sudo runner.
 - Runner accepts a fixed operation allowlist; the caller supplies no shell text, file paths, package names, service names, or command arguments.
 - Per-request idempotency records prevent accidental replay of the same request id.
@@ -45,7 +46,7 @@ Send to `POST /v1/execute` with `Authorization: Bearer <token>`.
 
 ## Bootstrap
 
-Run the reviewed host foundation first so `coord-svc` exists. Then, from this directory as root:
+Run the reviewed host foundation first so `coordsvc` exists. Then, from this directory as root:
 
 ```sh
 ./check.sh
@@ -61,7 +62,7 @@ curl --cacert ./ca.crt \
   -H "Authorization: Bearer $PCS_HOST_AGENT_TOKEN" \
   -H 'Content-Type: application/json' \
   --data '{"op":"status","request_id":"claude-20260930-status-001"}' \
-  https://HOST:8443/v1/execute
+  https://127.0.0.1:8443/v1/execute
 ```
 
-A production follow-up should move public ingress behind a durable identity-aware gateway or mTLS if/when one is available. This first version is intentionally small and reversible.
+This version intentionally has no public ingress. The current OS hardening also disables SSH TCP forwarding, so remote access must not be assumed; add any private ingress only through a separately reviewed trust-boundary change.
