@@ -5,8 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=coord-svc
-Group=coord-svc
+User=coordsvc
+Group=coordsvc
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/bin/python3 /usr/local/libexec/pcs-host-agent/agent.py
 Restart=on-failure
