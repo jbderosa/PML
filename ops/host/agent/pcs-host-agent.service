@@ -1,0 +1,31 @@
+[Unit]
+Description=PCS narrow host-control API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=coord-svc
+Group=coord-svc
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /usr/local/libexec/pcs-host-agent/agent.py
+Restart=on-failure
+RestartSec=3s
+UMask=0077
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadOnlyPaths=/etc/pcs-host-agent /usr/local/libexec/pcs-host-agent /usr/local/libexec/pcs-host-agent-runner
+ReadWritePaths=/var/lib/pcs-host-agent
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=false
+NoNewPrivileges=false
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+RestrictRealtime=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target
