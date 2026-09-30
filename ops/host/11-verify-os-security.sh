@@ -55,7 +55,7 @@ pass "key-only socket-activated SSH listening on port $ssh_port"
 ufw_text="$(ufw status verbose)"
 grep -q '^Status: active$' <<<"$ufw_text" || die "UFW inactive"
 grep -q 'Default: deny (incoming), allow (outgoing)' <<<"$ufw_text" || die "UFW defaults are not deny-in/allow-out"
-ufw status | awk -v p="$ssh_port/tcp" -v pn="$ssh_port" '
+awk -v p="$ssh_port/tcp" -v pn="$ssh_port" '
   $1==p && $2=="ALLOW" && $3=="IN" {ssh_rules++; next}
   $1==pn && $2=="ALLOW" && $3=="IN" {ssh_rules++; next}
   $1==p && $2=="(v6)" && $3=="ALLOW" && $4=="IN" {ssh_rules++; next}
@@ -63,7 +63,7 @@ ufw status | awk -v p="$ssh_port/tcp" -v pn="$ssh_port" '
   $2=="ALLOW" && $3=="IN" {bad=1; print "unexpected_ufw_rule=" $0 > "/dev/stderr"}
   $3=="ALLOW" && $4=="IN" {bad=1; print "unexpected_ufw_rule=" $0 > "/dev/stderr"}
   END {if (ssh_rules < 1 || bad) exit 1}
-' || die "SSH-only UFW rule verification failed"
+' <<<"$ufw_text" || die "SSH-only UFW rule verification failed"
 pass "UFW default-deny with SSH-only inbound rule"
 
 check_path(){
