@@ -40,4 +40,4 @@ Checkpoint before continuing. Verify:
 8. ordinary core-dump/Apport persistence is disabled and kernel.core_pattern discards cores;
 9. no application secrets or personal data were introduced.
 
-The next milestone may install the container/runtime layer only after these checks pass.
+Run `11-verify-os-security.sh` after the mutating script and after proving a second independent key-only SSH login. The next milestone may install the container/runtime layer only after that verifier prints `ARCHITECT_OS_FOUNDATION_VERIFY_PASS`.
