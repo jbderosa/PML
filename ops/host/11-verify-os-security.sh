@@ -4,6 +4,24 @@ umask 077
 
 die(){ printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 pass(){ printf 'PASS: %s\n' "$*"; }
+
+# Reads `ufw status verbose` text on stdin. Succeeds only if every inbound
+# ALLOW/LIMIT rule targets the SSH port and at least one does. Plain
+# `ufw status` has no IN column and must fail.
+ufw_ssh_only(){
+  awk -v p="$1/tcp" -v pn="$1" '
+    { action=$2; dir=$3; if ($2=="(v6)") {action=$3; dir=$4} }
+    (action=="ALLOW" || action=="LIMIT") && dir=="IN" {
+      if ($1==p || $1==pn) ssh_rules++
+      else {bad=1; print "unexpected_ufw_rule=" $0 > "/dev/stderr"}
+    }
+    END {if (ssh_rules < 1 || bad) exit 1}
+  '
+}
+
+# check.sh sources this file with VERIFY_LIB_ONLY=1 to test the parser.
+if [[ "${VERIFY_LIB_ONLY:-0}" == "1" ]]; then return 0; fi
+
 [[ "$EUID" -eq 0 ]] || die "run as root"
 
 expected_hostname="${EXPECTED_HOSTNAME:-pil-prod-01}"
@@ -55,15 +73,7 @@ pass "key-only socket-activated SSH listening on port $ssh_port"
 ufw_text="$(ufw status verbose)"
 grep -q '^Status: active$' <<<"$ufw_text" || die "UFW inactive"
 grep -q 'Default: deny (incoming), allow (outgoing)' <<<"$ufw_text" || die "UFW defaults are not deny-in/allow-out"
-awk -v p="$ssh_port/tcp" -v pn="$ssh_port" '
-  $1==p && $2=="ALLOW" && $3=="IN" {ssh_rules++; next}
-  $1==pn && $2=="ALLOW" && $3=="IN" {ssh_rules++; next}
-  $1==p && $2=="(v6)" && $3=="ALLOW" && $4=="IN" {ssh_rules++; next}
-  $1==pn && $2=="(v6)" && $3=="ALLOW" && $4=="IN" {ssh_rules++; next}
-  $2=="ALLOW" && $3=="IN" {bad=1; print "unexpected_ufw_rule=" $0 > "/dev/stderr"}
-  $3=="ALLOW" && $4=="IN" {bad=1; print "unexpected_ufw_rule=" $0 > "/dev/stderr"}
-  END {if (ssh_rules < 1 || bad) exit 1}
-' <<<"$ufw_text" || die "SSH-only UFW rule verification failed"
+ufw_ssh_only "$ssh_port" <<<"$ufw_text" || die "SSH-only UFW rule verification failed"
 pass "UFW default-deny with SSH-only inbound rule"
 
 check_path(){
@@ -76,7 +86,8 @@ for spec in "pml:pmlsvc" "pil:pilsvc" "coord:coordsvc"; do
   user="${spec##*:}"
   shell="$(getent passwd "$user" | cut -d: -f7)"
   [[ "$shell" == "/usr/sbin/nologin" ]] || die "$user has login shell $shell"
-  [[ " $(id -nG "$user") " != *" sudo "* ]] || die "$user is in sudo group"
+  groups=" $(id -nG "$user") "
+  [[ "$groups" != *" sudo "* && "$groups" != *" admin "* ]] || die "$user is in an admin group"
   check_path "/srv/$name" "root:root:755"
   check_path "/srv/$name/app" "root:root:755"
   check_path "/srv/$name/state" "$user:$user:700"

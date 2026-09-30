@@ -38,8 +38,13 @@ apt-get install -y --no-install-recommends \
   ca-certificates \
   ufw \
   zram-tools \
-  unattended-upgrades
+  unattended-upgrades \
+  linux-image-extra-virtual
 
+# linux-image-extra-virtual keeps linux-modules-extra (which ships zram)
+# installed for every future kernel, so a kernel upgrade plus reboot cannot
+# silently drop zram swap. It may pull in a newer kernel; that kernel only
+# takes effect at the next (manual) reboot.
 # Minimal cloud images can omit the zram kernel module even when zram-tools is
 # available. Install the matching extra-module package only when needed.
 if ! modprobe zram >/dev/null 2>&1; then
@@ -162,7 +167,7 @@ ufw --force enable
 # Noble uses socket-activated OpenSSH by default. Keep the socket enabled and
 # reload the currently active daemon without converting boot activation modes.
 systemctl enable --now ssh.socket
-systemctl reload ssh.service
+systemctl try-reload-or-restart ssh.service
 systemctl is-active --quiet ssh.socket || die "ssh.socket is not active"
 listeners="$(ss -lntH)"
 awk -v p="$ssh_port" '$4 ~ ("(^|:)" p "$") {found=1} END {exit !found}' <<<"$listeners" || die "SSH is no longer listening on the expected port"
